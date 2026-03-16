@@ -71,11 +71,11 @@ public class AuthEndpoint {
 
   @Get("/.well-known/openid-configuration")
   public OpenIdConfiguration getOpenIdConfiguration() {
-    var publicUrl = System.getenv("PUBLIC_HOSTNAME");
-    if (publicUrl == null) {
+    var publicHostname = System.getenv("PUBLIC_HOSTNAME");
+    if (publicHostname == null) {
       throw new RuntimeException("Environment variable PUBLIC_HOSTNAME not set");
     }
-    return new OpenIdConfiguration(publicUrl + "/.well-known/jwks.json");
+    return new OpenIdConfiguration("https://" + publicHostname + "/.well-known/jwks.json");
   }
 
   /** Strip the leading zero byte that BigInteger.toByteArray() adds for positive numbers. */
