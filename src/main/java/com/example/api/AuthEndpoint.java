@@ -2,6 +2,7 @@ package com.example.api;
 
 import akka.javasdk.annotations.Acl;
 import akka.javasdk.annotations.http.Get;
+import akka.javasdk.annotations.http.HttpEndpoint;
 import akka.javasdk.annotations.http.Post;
 import com.example.domain.KeyRotator;
 
@@ -12,6 +13,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 
+@HttpEndpoint()
 @Acl(allow = @Acl.Matcher(principal = Acl.Principal.INTERNET))
 public class AuthEndpoint {
 
