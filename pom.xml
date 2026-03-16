@@ -8,13 +8,7 @@
   </parent>
   
   <groupId>com.example</groupId>
-  <artifactId>empty-service</artifactId>
+  <artifactId>pretend-jwks-service</artifactId>
   <version>1.0-SNAPSHOT</version>
   <packaging>jar</packaging>
-
-  <name>empty-service</name>
-
-  <dependencies>
-    <!-- Your dependencies go here -->
-  </dependencies>
 </project>
