@@ -1,10 +1,8 @@
-# Template of empty project
+# Dummy openid and jwt/jwks service
 
-To understand the Akka concepts that are the basis for this example, see [Development Process](https://doc.akka.io/concepts/development-process.html) in the documentation.
+Needs to be deployed as a single node (generates keypair on boot) 
 
-This project contains the skeleton to create an Akka service. To understand more about these components, see [Developing services](https://doc.akka.io/sdk/index.html).
-
-You are supposed to change `empty-service` and the package name `com.example` to your own names.
+Exposed dns name must be set as secret/env var PUBLIC_HOSTNAME
 
 Use Maven to build your project:
 
@@ -35,3 +33,37 @@ akka service deploy empty-service empty-service:tag-name --push
 ```
 
 Refer to [Deploy and manage services](https://doc.akka.io/operations/services/deploy-service.html) for more information.
+
+## API Endpoints
+
+### Issue a JWT token
+
+```shell
+curl -X POST http://localhost:9000/auth \
+  -H "Content-Type: application/json" \
+  -d '{"subject": "my-user"}'
+```
+
+### Issue a JWT token for anonymous subject
+
+```shell
+curl -X POST http://localhost:9000/auth
+```
+
+### Rotate the signing key
+
+```shell
+curl -X POST http://localhost:9000/rotate
+```
+
+### Get JWKS (public keys)
+
+```shell
+curl http://localhost:9000/.well-known/jwks.json
+```
+
+### Get OpenID configuration
+
+```shell
+curl http://localhost:9000/.well-known/openid-configuration
+```
