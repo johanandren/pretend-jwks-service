@@ -5,6 +5,7 @@ import akka.javasdk.annotations.http.Get;
 import akka.javasdk.annotations.http.HttpEndpoint;
 import akka.javasdk.annotations.http.Post;
 import com.example.domain.KeyRotator;
+import com.typesafe.config.Config;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Signature;
@@ -18,9 +19,11 @@ import java.util.List;
 public class AuthEndpoint {
 
   private final KeyRotator keyRotator;
+  private final String issuer;
 
-  public AuthEndpoint(KeyRotator keyRotator) {
+  public AuthEndpoint(KeyRotator keyRotator, Config config) {
     this.keyRotator = keyRotator;
+    issuer = config.getString("pretend-jwks.issuer");
   }
 
   @Post("/rotate")
@@ -43,7 +46,7 @@ public class AuthEndpoint {
       long iat = now.getEpochSecond();
       long exp = now.plusSeconds(3600).getEpochSecond();
       String payload = encoder.encodeToString(
-          ("{\"sub\":\"" + subject + "\",\"iat\":" + iat + ",\"exp\":" + exp + "}").getBytes(StandardCharsets.UTF_8));
+          ("{\"sub\":\"" + subject + "\",\"iss\":\"" + issuer + "\",\"iat\":" + iat + ",\"exp\":" + exp + "}").getBytes(StandardCharsets.UTF_8));
 
       String signingInput = header + "." + payload;
       Signature sig = Signature.getInstance("SHA256withRSA");
@@ -64,7 +67,7 @@ public class AuthEndpoint {
       var rsaPublicKey = (RSAPublicKey) entry.keyPair().getPublic();
       String n = encoder.encodeToString(unsignedBytes(rsaPublicKey.getModulus().toByteArray()));
       String e = encoder.encodeToString(unsignedBytes(rsaPublicKey.getPublicExponent().toByteArray()));
-      return new JwkKey("RSA", "sig", entry.kid(), n, e);
+      return new JwkKey("RSA", "sig", "RS256", entry.kid(), n, e);
     }).toList();
     return new JwksResponse(jwkKeys);
   }
@@ -88,7 +91,7 @@ public class AuthEndpoint {
     return bytes;
   }
 
-  public record JwkKey(String kty, String use, String kid, String n, String e) {}
+  public record JwkKey(String kty, String use, String alg, String kid, String n, String e) {}
   public record JwksResponse(List<JwkKey> keys) {}
   public record OpenIdConfiguration(String jwks_uri) {}
   public record AuthRequest(String subject) {}

@@ -1,9 +1,5 @@
 # Dummy openid and jwt/jwks service
 
-Needs to be deployed as a single node (generates keypair on boot) 
-
-Exposed dns name must be set as secret/env var PUBLIC_HOSTNAME
-
 Use Maven to build your project:
 
 ```shell
@@ -32,7 +28,27 @@ Deploy the service using the image tag from above `mvn install`:
 akka service deploy empty-service empty-service:tag-name --push
 ```
 
-Refer to [Deploy and manage services](https://doc.akka.io/operations/services/deploy-service.html) for more information.
+Needs to be deployed as a single node (generates keypair on boot) and exposed.
+
+Exposed dns name must be set as env var PUBLIC_HOSTNAME
+
+Example descriptor:
+
+```yaml
+name: pretend-jwks-service
+service:
+  env:
+  - name: PUBLIC_HOSTNAME
+    value: plain-paper-5157.global.apps.akka.dev
+  image: kcr.us-east-1.kalix.dev/lightbend/johanstestproject/pretend-jwks-service:1.0-SNAPSHOT-20260317080727
+  resources:
+    autoscaling:
+      maxInstances: 1
+      minInstances: 1
+    runtime:
+      mode: embedded
+  workloadIdentity: {}
+```
 
 ## API Endpoints
 
