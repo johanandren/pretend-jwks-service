@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JWKS Key Inspector</title>
+  <style>
+    :root{
+      --font-sans:Instrument Sans,system-ui,sans-serif;
+      --font-mono:Roboto Mono,ui-monospace,monospace;
+      --bg:#000;--fg:#fff;--primary:#ffce4a;--secondary:#00d8dd;
+      --ok:#72d35b;--warn:#ff9925;--err:#fa3823;
+      --surface-1:#18181b;--surface-2:#27272a;--surface-3:#3f3f46;--surface-4:#52525b;
+      --divider:rgba(255,255,255,.15);--radius:6px;--body-max-width:64rem;
+      color-scheme:light dark;accent-color:var(--secondary)
+    }
+    @media(prefers-color-scheme:light){:root{
+      --bg:#fff;--fg:#1a1a1a;--primary:#f5b60b;--secondary:#02a4a7;
+      --ok:#5aa547;--warn:#e67d05;--err:#d9331a;
+      --surface-1:#fff;--surface-2:#f4f4f5;--surface-3:#e4e4e7;--surface-4:#d4d4d8;
+      --divider:rgba(17,17,17,.1)
+    }}
+    *{box-sizing:border-box}
+    html{font-family:var(--font-sans);color:var(--fg);background:var(--bg);line-height:1.5}
+    body{margin:0 auto;padding:1.5rem;max-width:var(--body-max-width)}
+    h1,h2,h3{font-weight:550;margin:1.5rem 0 .75rem}
+    h1{font-size:1.5rem}h2{font-size:1.25rem}h3{font-size:1.125rem}
+    button{display:inline-flex;align-items:center;gap:.375rem;font-weight:550;height:2.25rem;padding:0 .75rem;background:0 0;border:1px solid var(--surface-4);cursor:pointer;transition:.15s;font:inherit;font-size:.9375rem;color:var(--fg);border-radius:var(--radius)}
+    button:hover{background:var(--surface-2)}
+    button:active{background:var(--surface-3)}
+    code{font-family:var(--font-mono);font-size:.875rem;background:var(--surface-2);padding:.125rem .375rem;border-radius:3px}
+    pre{font-family:var(--font-mono);font-size:.875rem;background:var(--surface-1);border-radius:var(--radius);padding:.75rem 1rem;overflow-x:auto;word-break:break-all;white-space:pre-wrap}
+    hr{border:none;border-top:1px solid var(--divider);margin:1.5rem 0}
+    small{font-size:.875rem;opacity:.6}
+
+    .toolbar { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .toolbar h1 { margin: 0; }
+    .spacer { flex: 1; }
+    .status { font-size: .875rem; opacity: .6; }
+
+    .key-card {
+      border: 1px solid var(--divider);
+      border-radius: var(--radius);
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+    .key-header {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      padding: .75rem 1rem;
+      background: var(--surface-2);
+      flex-wrap: wrap;
+    }
+    .key-header h3 { margin: 0; font-size: 1rem; }
+    .badge {
+      font-size: .75rem;
+      font-weight: 600;
+      padding: .125rem .5rem;
+      border-radius: 1rem;
+      background: var(--surface-3);
+    }
+    .badge.current { background: var(--ok); color: #000; }
+    .badge.previous { background: var(--warn); color: #000; }
+    .key-body { padding: 1rem; }
+    .field { margin-bottom: .75rem; }
+    .field label { display: block; font-size: .75rem; font-weight: 600; opacity: .6; margin-bottom: .25rem; text-transform: uppercase; letter-spacing: .05em; }
+    .field code { display: block; word-break: break-all; }
+    .modulus-value { font-family: var(--font-mono); font-size: .8125rem; background: var(--surface-2); border-radius: var(--radius); padding: .75rem; word-break: break-all; line-height: 1.6; }
+    .modulus-truncated { overflow: hidden; max-height: 3.5rem; position: relative; }
+    .modulus-truncated::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 2rem;
+      background: linear-gradient(transparent, var(--surface-2));
+    }
+    .expand-btn { margin-top: .5rem; font-size: .8125rem; }
+    .meta-row { display: flex; gap: 2rem; flex-wrap: wrap; }
+    .meta-row .field { flex: 1; min-width: 8rem; }
+
+    #error-msg { color: var(--err); margin: 1rem 0; display: none; }
+    #loading { opacity: .6; display: none; }
+    #keys-container { display: none; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <h1>JWKS Key Inspector</h1>
+    <span class="spacer"></span>
+    <span class="status" id="last-updated"></span>
+    <button onclick="loadKeys()">↺ Refresh</button>
+    <button onclick="rotateKey()" style="border-color: var(--warn); color: var(--warn)">⟳ Rotate key</button>
+  </div>
+
+  <p id="loading">Loading keys…</p>
+  <p id="error-msg"></p>
+  <div id="keys-container"></div>
+
+  <script>
+    async function loadKeys() {
+      const container = document.getElementById('keys-container');
+      const loading = document.getElementById('loading');
+      const errorMsg = document.getElementById('error-msg');
+
+      loading.style.display = 'block';
+      container.style.display = 'none';
+      errorMsg.style.display = 'none';
+
+      try {
+        const res = await fetch('/.well-known/jwks.json');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { keys } = await res.json();
+
+        container.innerHTML = '';
+        keys.forEach((key, i) => {
+          container.appendChild(buildKeyCard(key, i === 0));
+        });
+
+        document.getElementById('last-updated').textContent =
+          'Updated ' + new Date().toLocaleTimeString();
+        container.style.display = 'block';
+      } catch (e) {
+        errorMsg.textContent = 'Failed to load keys: ' + e.message;
+        errorMsg.style.display = 'block';
+      } finally {
+        loading.style.display = 'none';
+      }
+    }
+
+    function buildKeyCard(key, isCurrent) {
+      const card = document.createElement('div');
+      card.className = 'key-card';
+
+      const modulusId = 'mod-' + key.kid.replace(/[^a-z0-9]/gi, '-');
+
+      card.innerHTML = `
+        <div class="key-header">
+          <h3><code>${escHtml(key.kid)}</code></h3>
+          <span class="badge ${isCurrent ? 'current' : 'previous'}">${isCurrent ? 'current' : 'previous'}</span>
+          <span class="badge">${escHtml(key.alg)}</span>
+          <span class="badge">${escHtml(key.kty)}</span>
+          <span class="badge">${escHtml(key.use)}</span>
+        </div>
+        <div class="key-body">
+          <div class="field">
+            <label>Public exponent (e)</label>
+            <code>${escHtml(key.e)}</code>
+          </div>
+          <div class="field">
+            <label>Modulus (n) — ${modulusLength(key.n)} bits</label>
+            <div class="modulus-value modulus-truncated" id="${modulusId}">${escHtml(key.n)}</div>
+            <button class="expand-btn" onclick="toggleModulus('${modulusId}', this)">Show full modulus</button>
+          </div>
+        </div>
+      `;
+      return card;
+    }
+
+    function modulusLength(n) {
+      // base64url chars represent 6 bits each, minus padding
+      return Math.floor(n.length * 6 / 8) * 8;
+    }
+
+    function toggleModulus(id, btn) {
+      const el = document.getElementById(id);
+      const collapsed = el.classList.toggle('modulus-truncated');
+      btn.textContent = collapsed ? 'Show full modulus' : 'Collapse';
+    }
+
+    async function rotateKey() {
+      const errorMsg = document.getElementById('error-msg');
+      errorMsg.style.display = 'none';
+      try {
+        const res = await fetch('/rotate', { method: 'POST' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await loadKeys();
+      } catch (e) {
+        errorMsg.textContent = 'Rotate failed: ' + e.message;
+        errorMsg.style.display = 'block';
+      }
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    loadKeys();
+  </script>
+</body>
+</html>

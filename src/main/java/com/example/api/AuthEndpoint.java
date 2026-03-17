@@ -5,6 +5,7 @@ import akka.javasdk.annotations.http.Get;
 import akka.javasdk.annotations.http.HttpEndpoint;
 import akka.javasdk.annotations.http.Post;
 import akka.javasdk.client.ComponentClient;
+import akka.javasdk.http.HttpResponses;
 import com.example.application.KeyPairEntity;
 import com.example.domain.KeyPairState;
 import com.typesafe.config.Config;
@@ -25,6 +26,11 @@ public class AuthEndpoint {
   public AuthEndpoint(ComponentClient componentClient, Config config) {
     this.componentClient = componentClient;
     issuer = config.getString("pretend-jwks.issuer");
+  }
+
+  @Get("/")
+  public akka.http.javadsl.model.HttpResponse index() {
+    return HttpResponses.staticResource("index.html");
   }
 
   @Post("/rotate")
