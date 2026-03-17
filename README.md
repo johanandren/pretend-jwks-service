@@ -25,7 +25,7 @@ Install the `akka` CLI as documented in [Install Akka CLI](https://doc.akka.io/r
 Deploy the service using the image tag from above `mvn install`:
 
 ```shell
-akka service deploy empty-service empty-service:tag-name --push
+akka service deploy pretend-jwks-service empty-service:tag-name --push
 ```
 
 Needs to be deployed as a single node (generates keypair on boot) and exposed.
