@@ -4,12 +4,13 @@ import akka.javasdk.annotations.Acl;
 import akka.javasdk.annotations.http.Get;
 import akka.javasdk.annotations.http.HttpEndpoint;
 import akka.javasdk.annotations.http.Post;
-import com.example.domain.KeyRotator;
+import akka.javasdk.client.ComponentClient;
+import com.example.application.KeyPairEntity;
+import com.example.domain.KeyPairState;
 import com.typesafe.config.Config;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Signature;
-import java.security.interfaces.RSAPublicKey;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -18,24 +19,30 @@ import java.util.List;
 @Acl(allow = @Acl.Matcher(principal = Acl.Principal.INTERNET))
 public class AuthEndpoint {
 
-  private final KeyRotator keyRotator;
+  private final ComponentClient componentClient;
   private final String issuer;
 
-  public AuthEndpoint(KeyRotator keyRotator, Config config) {
-    this.keyRotator = keyRotator;
+  public AuthEndpoint(ComponentClient componentClient, Config config) {
+    this.componentClient = componentClient;
     issuer = config.getString("pretend-jwks.issuer");
   }
 
   @Post("/rotate")
   public akka.http.javadsl.model.HttpResponse rotate() {
-    keyRotator.rotate();
+    var newEntry = KeyPairState.KeyEntry.generate();
+    componentClient.forKeyValueEntity(KeyPairEntity.ENTITY_ID)
+        .method(KeyPairEntity::rotate)
+        .invoke(newEntry);
     return akka.javasdk.http.HttpResponses.ok();
   }
 
   @Post("/auth")
   public TokenResponse auth(AuthRequest request) {
     try {
-      var current = keyRotator.current();
+      var state = componentClient.forKeyValueEntity(KeyPairEntity.ENTITY_ID)
+          .method(KeyPairEntity::get)
+          .invoke();
+      var current = state.current();
       var encoder = Base64.getUrlEncoder().withoutPadding();
       var now = Instant.now();
 
@@ -50,7 +57,7 @@ public class AuthEndpoint {
 
       String signingInput = header + "." + payload;
       Signature sig = Signature.getInstance("SHA256withRSA");
-      sig.initSign(current.keyPair().getPrivate());
+      sig.initSign(current.privateKey());
       sig.update(signingInput.getBytes(StandardCharsets.UTF_8));
       String signature = encoder.encodeToString(sig.sign());
 
@@ -62,9 +69,12 @@ public class AuthEndpoint {
 
   @Get("/.well-known/jwks.json")
   public JwksResponse getJwks() {
+    var state = componentClient.forKeyValueEntity(KeyPairEntity.ENTITY_ID)
+        .method(KeyPairEntity::get)
+        .invoke();
     var encoder = Base64.getUrlEncoder().withoutPadding();
-    var jwkKeys = keyRotator.all().stream().map(entry -> {
-      var rsaPublicKey = (RSAPublicKey) entry.keyPair().getPublic();
+    var jwkKeys = state.allEntries().stream().map(entry -> {
+      var rsaPublicKey = entry.publicKey();
       String n = encoder.encodeToString(unsignedBytes(rsaPublicKey.getModulus().toByteArray()));
       String e = encoder.encodeToString(unsignedBytes(rsaPublicKey.getPublicExponent().toByteArray()));
       return new JwkKey("RSA", "sig", "RS256", entry.kid(), n, e);

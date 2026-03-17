@@ -28,8 +28,6 @@ Deploy the service using the image tag from above `mvn install`:
 akka service deploy pretend-jwks-service empty-service:tag-name --push
 ```
 
-Needs to be deployed as a single node (generates keypair on boot) and exposed.
-
 Exposed dns name must be set as env var PUBLIC_HOSTNAME
 
 Example descriptor:
@@ -42,9 +40,6 @@ service:
     value: myservice.example.com
   image: myorg/pretend-jwks-service:1.0-SNAPSHOT
   resources:
-    autoscaling:
-      maxInstances: 1
-      minInstances: 1
     runtime:
       mode: embedded
   workloadIdentity: {}
