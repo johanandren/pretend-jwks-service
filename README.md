@@ -39,8 +39,8 @@ name: pretend-jwks-service
 service:
   env:
   - name: PUBLIC_HOSTNAME
-    value: plain-paper-5157.global.apps.akka.dev
-  image: kcr.us-east-1.kalix.dev/lightbend/johanstestproject/pretend-jwks-service:1.0-SNAPSHOT-20260317080727
+    value: myservice.example.com
+  image: myorg/pretend-jwks-service:1.0-SNAPSHOT
   resources:
     autoscaling:
       maxInstances: 1
