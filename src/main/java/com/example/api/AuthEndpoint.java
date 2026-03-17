@@ -1,31 +1,42 @@
 package com.example.api;
 
+import akka.http.javadsl.model.ContentTypes;
+import akka.http.javadsl.model.HttpHeader;
+import akka.http.javadsl.model.HttpResponse;
+import akka.http.javadsl.model.headers.RawHeader;
+import akka.javasdk.JsonSupport;
 import akka.javasdk.annotations.Acl;
 import akka.javasdk.annotations.http.Get;
 import akka.javasdk.annotations.http.HttpEndpoint;
 import akka.javasdk.annotations.http.Post;
 import akka.javasdk.client.ComponentClient;
+import akka.javasdk.http.AbstractHttpEndpoint;
 import akka.javasdk.http.HttpResponses;
 import com.example.application.KeyPairEntity;
 import com.example.domain.KeyPairState;
 import com.typesafe.config.Config;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.Signature;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.List;
 
 @HttpEndpoint()
 @Acl(allow = @Acl.Matcher(principal = Acl.Principal.INTERNET))
-public class AuthEndpoint {
+public class AuthEndpoint extends AbstractHttpEndpoint {
 
   private final ComponentClient componentClient;
   private final String issuer;
+  private final Duration rotationInterval;
 
   public AuthEndpoint(ComponentClient componentClient, Config config) {
     this.componentClient = componentClient;
     issuer = config.getString("pretend-jwks.issuer");
+    rotationInterval = config.getDuration("pretend-jwks.key-rotation-interval");
   }
 
   @Get("/")
@@ -74,7 +85,7 @@ public class AuthEndpoint {
   }
 
   @Get("/.well-known/jwks.json")
-  public JwksResponse getJwks() {
+  public HttpResponse getJwks() {
     var state = componentClient.forKeyValueEntity(KeyPairEntity.ENTITY_ID)
         .method(KeyPairEntity::get)
         .invoke();
@@ -85,7 +96,27 @@ public class AuthEndpoint {
       String e = encoder.encodeToString(unsignedBytes(rsaPublicKey.getPublicExponent().toByteArray()));
       return new JwkKey("RSA", "sig", "RS256", entry.kid(), n, e);
     }).toList();
-    return new JwksResponse(jwkKeys);
+
+    String json = JsonSupport.encodeToString(new JwksResponse(jwkKeys));
+    String etag = "\"" + sha256Hex(json) + "\"";
+    long maxAge = rotationInterval.toSeconds();
+
+    HttpHeader cacheControl = RawHeader.create("Cache-Control", "public, max-age=" + maxAge);
+    HttpHeader etagHeader = RawHeader.create("ETag", etag);
+
+    var ifNoneMatch = requestContext().requestHeader("If-None-Match").map(HttpHeader::value);
+    if (ifNoneMatch.map(v -> v.equals(etag)).orElse(false)) {
+      return HttpResponse.create()
+          .withStatus(304)
+          .addHeader(cacheControl)
+          .addHeader(etagHeader);
+    }
+
+    return HttpResponse.create()
+        .withStatus(200)
+        .withEntity(ContentTypes.APPLICATION_JSON, json)
+        .addHeader(cacheControl)
+        .addHeader(etagHeader);
   }
 
   @Get("/.well-known/openid-configuration")
@@ -95,6 +126,16 @@ public class AuthEndpoint {
       throw new RuntimeException("Environment variable PUBLIC_HOSTNAME not set");
     }
     return new OpenIdConfiguration("https://" + publicHostname + "/.well-known/jwks.json");
+  }
+
+  private String sha256Hex(String input) {
+    try {
+      var digest = MessageDigest.getInstance("SHA-256");
+      byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+      return HexFormat.of().formatHex(hash);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to compute SHA-256", e);
+    }
   }
 
   /** Strip the leading zero byte that BigInteger.toByteArray() adds for positive numbers. */

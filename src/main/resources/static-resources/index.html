@@ -82,6 +82,24 @@
     #error-msg { color: var(--err); margin: 1rem 0; display: none; }
     #loading { opacity: .6; display: none; }
     #keys-container { display: none; }
+
+    .issue-section { margin-top: 2rem; }
+    .issue-form { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .issue-form input {
+      height: 2.25rem; padding: 0 .75rem; border: 1px solid var(--surface-4);
+      border-radius: var(--radius); background: var(--surface-1); color: var(--fg);
+      font: inherit; font-size: .9375rem; flex: 1; min-width: 12rem; max-width: 24rem;
+    }
+    .issue-form input:focus { outline: 2px solid var(--secondary); outline-offset: 1px; }
+    #token-result { display: none; }
+    #token-result pre { word-break: break-all; white-space: pre-wrap; }
+    #token-error { color: var(--err); display: none; margin-bottom: .5rem; }
+    .copy-btn { font-size: .8125rem; }
+    .token-parts { display: flex; flex-direction: column; gap: .5rem; margin-top: .75rem; }
+    .token-part { padding: .5rem .75rem; border-radius: var(--radius); font-family: var(--font-mono); font-size: .8125rem; word-break: break-all; }
+    .token-part.header  { background: rgba(250,56,35,.15); border-left: 3px solid var(--err); }
+    .token-part.payload { background: rgba(114,211,91,.15); border-left: 3px solid var(--ok); }
+    .token-part.sig     { background: rgba(0,216,221,.15); border-left: 3px solid var(--secondary); }
   </style>
 </head>
 <body>
@@ -93,6 +111,30 @@
     <button onclick="rotateKey()" style="border-color: var(--warn); color: var(--warn)">⟳ Rotate key</button>
   </div>
 
+  <div class="issue-section">
+    <h2>Issue JWT Token</h2>
+    <div class="issue-form">
+      <input id="subject-input" type="text" placeholder="Subject (leave blank for anonymous)" />
+      <button onclick="issueToken()">⚡ Issue token</button>
+    </div>
+    <p id="token-error"></p>
+    <div id="token-result">
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem">
+        <strong>Token</strong>
+        <button class="copy-btn" onclick="copyToken()">⎘ Copy</button>
+      </div>
+      <pre id="token-raw"></pre>
+      <div class="token-parts">
+        <div class="token-part header"  id="token-header-decoded"></div>
+        <div class="token-part payload" id="token-payload-decoded"></div>
+        <div class="token-part sig"     id="token-sig"></div>
+      </div>
+      <small style="opacity:.5">Red = header · Green = payload · Blue = signature</small>
+    </div>
+  </div>
+
+  <hr>
+  <h2>JWKS Keys</h2>
   <p id="loading">Loading keys…</p>
   <p id="error-msg"></p>
   <div id="keys-container"></div>
@@ -187,6 +229,54 @@
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+    }
+
+    async function issueToken() {
+      const subjectInput = document.getElementById('subject-input');
+      const tokenError = document.getElementById('token-error');
+      const tokenResult = document.getElementById('token-result');
+
+      tokenError.style.display = 'none';
+      tokenResult.style.display = 'none';
+
+      const subject = subjectInput.value.trim();
+      const body = JSON.stringify(subject ? { subject } : {});
+
+      try {
+        const res = await fetch('/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { token } = await res.json();
+
+        const parts = token.split('.');
+        document.getElementById('token-raw').textContent = token;
+        document.getElementById('token-header-decoded').textContent =
+          JSON.stringify(JSON.parse(atob(base64urlDecode(parts[0]))), null, 2);
+        document.getElementById('token-payload-decoded').textContent =
+          JSON.stringify(JSON.parse(atob(base64urlDecode(parts[1]))), null, 2);
+        document.getElementById('token-sig').textContent = parts[2];
+
+        tokenResult.style.display = 'block';
+      } catch (e) {
+        tokenError.textContent = 'Failed to issue token: ' + e.message;
+        tokenError.style.display = 'block';
+      }
+    }
+
+    function base64urlDecode(str) {
+      return str.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice(0, (4 - str.length % 4) % 4);
+    }
+
+    async function copyToken() {
+      const token = document.getElementById('token-raw').textContent;
+      try {
+        await navigator.clipboard.writeText(token);
+      } catch {
+        prompt('Copy token:', token);
+      }
     }
 
     loadKeys();
